@@ -7451,7 +7451,173 @@
             };
         
             /**
-             * STEP 3: Enhance form validation with cross-field checks
+             * STEP 3: Real-time validation as user types
+             * Errors appear immediately when invalid, disappear when corrected
+             */
+            function setupRealTimeValidation() {
+                const form = document.getElementById('viewerForm');
+                if (!form) return;
+        
+                // Function to validate a single field against all cross-rules
+                function validateFieldCrossRules(field, currentValue, allFormData) {
+                    if (!field.crossRules?.length) return { valid: true, messages: [] };
+        
+                    const errors = [];
+        
+                    for (const rule of field.crossRules) {
+                        if (!rule.target) continue;
+        
+                        const targetValue = allFormData[rule.target];
+                        
+                        // Skip if either value is empty
+                        if (currentValue === undefined || currentValue === '' || 
+                            targetValue === undefined || targetValue === '') {
+                            continue;
+                        }
+        
+                        // Parse numbers if possible
+                        const currentNum = parseFloat(currentValue);
+                        const targetNum = parseFloat(targetValue);
+        
+                        let valid = true;
+                        
+                        if (!isNaN(currentNum) && !isNaN(targetNum)) {
+                            // Numeric comparison
+                            switch(rule.operator) {
+                                case '>': valid = currentNum > targetNum; break;
+                                case '>=': valid = currentNum >= targetNum; break;
+                                case '<': valid = currentNum < targetNum; break;
+                                case '<=': valid = currentNum <= targetNum; break;
+                                case '=': valid = currentNum === targetNum; break;
+                                case '!=': valid = currentNum !== targetNum; break;
+                            }
+                        } else {
+                            // String comparison
+                            switch(rule.operator) {
+                                case '>': valid = currentValue > targetValue; break;
+                                case '>=': valid = currentValue >= targetValue; break;
+                                case '<': valid = currentValue < targetValue; break;
+                                case '<=': valid = currentValue <= targetValue; break;
+                                case '=': valid = currentValue === targetValue; break;
+                                case '!=': valid = currentValue !== targetValue; break;
+                            }
+                        }
+        
+                        if (!valid) {
+                            const targetField = state.fields.find(f => f.name === rule.target);
+                            const defaultMsg = `${field.label} must be ${rule.operator} ${targetField?.label || rule.target}`;
+                            errors.push(rule.message || defaultMsg);
+                        }
+                    }
+        
+                    return {
+                        valid: errors.length === 0,
+                        messages: errors
+                    };
+                }
+        
+                // Function to update field display with error/success state
+                function updateFieldDisplay(fieldName, validationResult) {
+                    const fieldEl = document.querySelector(`[data-field-name="${fieldName}"]`);
+                    if (!fieldEl) return;
+        
+                    // Remove existing error/success styling and messages
+                    fieldEl.classList.remove('field-error', 'field-success');
+                    const existingError = fieldEl.querySelector('.cross-error');
+                    if (existingError) existingError.remove();
+        
+                    if (!validationResult.valid) {
+                        // Show error
+                        fieldEl.classList.add('field-error');
+                        
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'cross-error';
+                        errorDiv.style.cssText = 'color:#dc3545; font-size:11px; margin-top:4px; padding:4px; background:#fff5f5; border-radius:4px; border-left:3px solid #dc3545;';
+                        errorDiv.innerHTML = '⚠ ' + validationResult.messages.join('<br>⚠ ');
+                        fieldEl.appendChild(errorDiv);
+                    } else {
+                        // Optional: Add success indicator
+                        fieldEl.classList.add('field-success');
+                    }
+                }
+        
+                // Debounced validation function
+                let validationTimeout;
+                form.addEventListener('input', (e) => {
+                    clearTimeout(validationTimeout);
+                    
+                    validationTimeout = setTimeout(() => {
+                        // Get current form data
+                        const formData = {};
+                        new FormData(form).forEach((v, k) => formData[k] = v);
+        
+                        // Track which fields have been validated
+                        const validatedFields = new Set();
+        
+                        // Validate each field that has cross-rules
+                        for (const field of state.fields) {
+                            if (!field.crossRules?.length) continue;
+        
+                            const currentValue = formData[field.name];
+                            const result = validateFieldCrossRules(field, currentValue, formData);
+                            
+                            updateFieldDisplay(field.name, result);
+                            validatedFields.add(field.name);
+        
+                            // Also update target fields if they have their own rules
+                            for (const rule of field.crossRules) {
+                                if (rule.target && !validatedFields.has(rule.target)) {
+                                    const targetField = state.fields.find(f => f.name === rule.target);
+                                    if (targetField) {
+                                        const targetResult = validateFieldCrossRules(targetField, formData[rule.target], formData);
+                                        updateFieldDisplay(rule.target, targetResult);
+                                        validatedFields.add(rule.target);
+                                    }
+                                }
+                            }
+                        }
+        
+                        // Clear errors for fields that are now valid
+                        document.querySelectorAll('.field-error').forEach(el => {
+                            const fieldName = el.dataset.fieldName;
+                            if (fieldName && validatedFields.has(fieldName)) {
+                                // Already handled above
+                            } else if (fieldName) {
+                                // Check if this field should still have error
+                                const field = state.fields.find(f => f.name === fieldName);
+                                if (field?.crossRules?.length) {
+                                    const result = validateFieldCrossRules(field, formData[fieldName], formData);
+                                    if (result.valid) {
+                                        el.classList.remove('field-error');
+                                        const errorDiv = el.querySelector('.cross-error');
+                                        if (errorDiv) errorDiv.remove();
+                                    }
+                                }
+                            }
+                        });
+        
+                    }, 300); // 300ms debounce
+                });
+        
+                // Also validate on blur (when user leaves a field)
+                form.addEventListener('blur', (e) => {
+                    if (e.target.name) {
+                        setTimeout(() => {
+                            const formData = {};
+                            new FormData(form).forEach((v, k) => formData[k] = v);
+                            
+                            const field = state.fields.find(f => f.name === e.target.name);
+                            if (field?.crossRules?.length) {
+                                const result = validateFieldCrossRules(field, formData[field.name], formData);
+                                updateFieldDisplay(field.name, result);
+                            }
+                        }, 100);
+                    }
+                }, true);
+            }
+        
+            /**
+             * STEP 4: Enhance form submission validation with cross-field checks
              */
             const originalValidateAllFields = window.validateAllFields;
             window.validateAllFields = function() {
@@ -7498,10 +7664,12 @@
                             if (!valid) {
                                 const targetField = state.fields.find(f => f.name === rule.target);
                                 const defaultMsg = `${field.label} must be ${rule.operator} ${targetField?.label || rule.target}`;
-        
+                                
                                 // Highlight the fields with error
-                                highlightCrossFieldError(field.name, rule.target);
-        
+                                const result = { valid: false, messages: [rule.message || defaultMsg] };
+                                updateFieldDisplay(field.name, result);
+                                updateFieldDisplay(rule.target, result);
+                                
                                 return { 
                                     valid: false, 
                                     message: rule.message || defaultMsg 
@@ -7522,9 +7690,12 @@
                             if (!valid) {
                                 const targetField = state.fields.find(f => f.name === rule.target);
                                 const defaultMsg = `${field.label} must be ${rule.operator} ${targetField?.label || rule.target}`;
-        
-                                highlightCrossFieldError(field.name, rule.target);
-        
+                                
+                                // Highlight the fields with error
+                                const result = { valid: false, messages: [rule.message || defaultMsg] };
+                                updateFieldDisplay(field.name, result);
+                                updateFieldDisplay(rule.target, result);
+                                
                                 return { 
                                     valid: false, 
                                     message: rule.message || defaultMsg 
@@ -7534,65 +7705,16 @@
                     }
                 }
         
-                // Clear any previous error highlights
-                clearCrossFieldErrors();
-        
                 return { valid: true };
             };
         
             /**
-             * STEP 4: Helper functions for visual feedback
+             * STEP 5: Setup real-time validation when form loads
              */
-            function highlightCrossFieldError(fieldName1, fieldName2) {
-                clearCrossFieldErrors();
-        
-                [fieldName1, fieldName2].forEach(name => {
-                    const fieldEl = document.querySelector(`[data-field-name="${name}"]`);
-                    if (fieldEl) {
-                        fieldEl.classList.add('field-error');
-        
-                        // Add error message if not exists
-                        let errorDiv = fieldEl.querySelector('.cross-error');
-                        if (!errorDiv) {
-                            errorDiv = document.createElement('div');
-                            errorDiv.className = 'cross-error';
-                            errorDiv.style.cssText = 'color:#dc3545; font-size:10px; margin-top:4px;';
-                            fieldEl.appendChild(errorDiv);
-                        }
-                        errorDiv.textContent = '⚠ Check cross-field validation';
-                    }
-                });
-            }
-        
-            function clearCrossFieldErrors() {
-                document.querySelectorAll('.field-error').forEach(el => {
-                    el.classList.remove('field-error');
-                });
-                document.querySelectorAll('.cross-error').forEach(el => el.remove());
-            }
-        
-            /**
-             * STEP 5: Real-time validation as user types
-             */
-            function setupLiveValidation() {
-                const form = document.getElementById('viewerForm');
-                if (!form) return;
-        
-                let timeout;
-                form.addEventListener('input', (e) => {
-                    clearTimeout(timeout);
-                    timeout = setTimeout(() => {
-                        // Just remove old errors, don't show new ones until submit
-                        clearCrossFieldErrors();
-                    }, 500);
-                });
-            }
-        
-            // Setup live validation when form loads
             const originalRenderFormViewer = window.renderFormViewer;
             window.renderFormViewer = function() {
                 if (originalRenderFormViewer) originalRenderFormViewer();
-                setTimeout(setupLiveValidation, 500);
+                setTimeout(setupRealTimeValidation, 500);
             };
         
             /**
@@ -7605,7 +7727,7 @@
             };
         
             console.log('✅ Cross-Field Validation Engine Ready!');
-            console.log('📝 Usage: Add rules to any number/text field to compare with other fields');
+            console.log('📝 Real-time validation active - errors appear/disappear as you type');
         }
         
         // Initialize the engine when the page loads
