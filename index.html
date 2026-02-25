@@ -3502,6 +3502,10 @@
                     </div>
                 `;
             }
+            // In renderProperties function, after handling other field types
+            if (field.type === 'cascadeuser' && typeof window.renderCascadingUserProperties === 'function') {
+                window.renderCascadingUserProperties(field);
+            }
             
             // Get other fields that can be used for conditions (exclude current field and sections)
             const otherFields = state.fields.filter(f => f.id !== field.id && f.type !== 'section');
@@ -5375,6 +5379,13 @@
                             break;
                         case 'rating':
                             input = `<div>${Array(field.max || 5).fill().map((_, i) => `<span onclick="setRating(this,${i+1})" class="rating-star" style="font-size:24px;cursor:pointer;opacity:0.3;color:#ffc107;">★</span>`).join('')}<input type="hidden" name="${field.name}"></div>`;
+                            break;
+                        case 'cascadeuser':
+                            if (typeof window.renderCascadingUserField === 'function') {
+                                input = window.renderCascadingUserField(field);
+                            } else {
+                                input = `<div>Loading user login...</div>`;
+                            }
                             break;
                         default:
                             input = `<input type="text" name="${field.name}" class="viewer-input" ${reqAttr}>`;
