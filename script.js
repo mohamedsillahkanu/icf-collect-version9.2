@@ -1,267 +1,367 @@
-// ==================== CONFIGURATION ====================
-const CONFIG = {
-    AUTH_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwC9lJdYj4askujDNO2GfK-Rqq02VBcr90NXhifgvpawboEK1YCyUfbi2GA2hFL2UghkA/exec'
-};
+// ==================== STATE MANAGEMENT ====================
+let currentUser = null;
+let formFields = [];
+let selectedFieldId = null;
+let fieldCounter = 0;
 
 // ==================== STORAGE HELPERS ====================
-const safeStorage = {
-    getItem: function(key) {
+const Storage = {
+    get: (key) => {
         try {
             return localStorage.getItem(key);
         } catch (e) {
             return null;
         }
     },
-    setItem: function(key, value) {
+    set: (key, value) => {
         try {
             localStorage.setItem(key, value);
         } catch (e) {}
     },
-    removeItem: function(key) {
+    remove: (key) => {
         try {
             localStorage.removeItem(key);
         } catch (e) {}
     }
 };
 
-// ==================== NOTIFICATION ====================
-function notify(message, type = 'success') {
-    const el = document.getElementById('notification');
-    if (!el) return;
-    el.textContent = message;
-    el.className = 'notification show' + (type === 'error' ? ' error' : type === 'info' ? ' info' : type === 'warning' ? ' warning' : '');
-    setTimeout(() => el.classList.remove('show'), 4000);
+// ==================== MESSAGE HANDLING ====================
+function showMessage(text, type = 'error') {
+    const msgDiv = document.getElementById('message');
+    msgDiv.textContent = text;
+    msgDiv.className = `message ${type}`;
 }
 
-// ==================== AUTH STATE ====================
-let currentUser = null;
+function showLoading(show) {
+    document.getElementById('loading').style.display = show ? 'block' : 'none';
+}
 
 // ==================== AUTH FUNCTIONS ====================
-function checkAuth() {
-    const saved = safeStorage.getItem('icfCollectUser');
-    if (saved) { 
-        currentUser = JSON.parse(saved); 
-        showBuilder(); 
-    }
-}
-
-function switchAuthTab(tab) {
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-    document.querySelector(`.auth-tab[data-tab="${tab}"]`)?.classList.add('active');
-    document.getElementById(tab + 'Form')?.classList.add('active');
+function switchTab(tab) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
     
-    // Hide error/success messages
-    document.getElementById('authError').style.display = 'none';
-    document.getElementById('authSuccess').style.display = 'none';
-}
-
-function showForgotPassword() {
-    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('forgotForm').classList.add('active');
-    document.getElementById('authError').style.display = 'none';
-    document.getElementById('authSuccess').style.display = 'none';
-}
-
-function showAuthLoading(show) {
-    document.getElementById('authLoading').style.display = show ? 'block' : 'none';
-    document.querySelectorAll('.auth-btn').forEach(btn => btn.disabled = show);
+    // Show correct form
+    document.querySelectorAll('.auth-form').forEach(form => form.classList.remove('active'));
+    document.getElementById(tab + 'Form').classList.add('active');
+    
+    // Hide message
+    document.getElementById('message').style.display = 'none';
 }
 
 async function handleLogin(e) {
     e.preventDefault();
     
-    const email = document.getElementById('loginEmail').value.trim();
+    const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
     
-    document.getElementById('authError').style.display = 'none';
-    showAuthLoading(true);
+    showLoading(true);
     
-    try {
-        // Try online first
-        const response = await fetch(CONFIG.AUTH_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                action: 'login',
-                email: email,
-                password: password
-            })
-        });
+    // Simulate login (replace with actual API call)
+    setTimeout(() => {
+        // For demo, accept any credentials
+        currentUser = { email, name: email.split('@')[0] };
+        Storage.set('user', JSON.stringify(currentUser));
         
-        const result = await response.json();
-        showAuthLoading(false);
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('userDisplay').textContent = currentUser.name;
         
-        if (result.success && result.user) {
-            currentUser = result.user;
-            safeStorage.setItem('icfCollectUser', JSON.stringify(result.user));
-            showBuilder();
-            notify('Login successful!', 'success');
-        } else {
-            document.getElementById('authError').style.display = 'block';
-            document.getElementById('authError').textContent = result.error || 'Invalid credentials';
-        }
-    } catch (error) {
-        // Offline fallback
-        showAuthLoading(false);
-        
-        const users = JSON.parse(safeStorage.getItem('icfCollectUsers') || '[]');
-        const user = users.find(u => u.email === email && u.password === password);
-        
-        if (user) {
-            currentUser = user;
-            safeStorage.setItem('icfCollectUser', JSON.stringify(user));
-            showBuilder();
-            notify('Logged in offline mode!', 'info');
-        } else {
-            document.getElementById('authError').style.display = 'block';
-            document.getElementById('authError').textContent = 'Connection error or invalid credentials';
-        }
-    }
+        showLoading(false);
+        loadForm();
+    }, 1000);
 }
 
 async function handleSignup(e) {
     e.preventDefault();
     
-    const name = document.getElementById('signupName').value.trim();
-    const email = document.getElementById('signupEmail').value.trim();
+    const name = document.getElementById('signupName').value;
+    const email = document.getElementById('signupEmail').value;
     const password = document.getElementById('signupPassword').value;
     
-    document.getElementById('authError').style.display = 'none';
-    document.getElementById('authSuccess').style.display = 'none';
-    showAuthLoading(true);
+    showLoading(true);
     
-    try {
-        const response = await fetch(CONFIG.AUTH_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({
-                action: 'signup',
-                name: name,
-                email: email,
-                password: password
-            })
-        });
-        
-        const result = await response.json();
-        showAuthLoading(false);
-        
-        if (result.success) {
-            // Save locally for offline
-            const users = JSON.parse(safeStorage.getItem('icfCollectUsers') || '[]');
-            if (!users.find(u => u.email === email)) {
-                users.push({ 
-                    id: result.user?.id || Date.now().toString(), 
-                    name, 
-                    email, 
-                    password 
-                });
-                safeStorage.setItem('icfCollectUsers', JSON.stringify(users));
-            }
-            
-            document.getElementById('authSuccess').style.display = 'block';
-            document.getElementById('authSuccess').textContent = 'Account created! Please login.';
-            
-            setTimeout(() => switchAuthTab('login'), 1500);
-        } else {
-            document.getElementById('authError').style.display = 'block';
-            document.getElementById('authError').textContent = result.error || 'Registration failed';
-        }
-    } catch (error) {
-        showAuthLoading(false);
-        
-        // Offline signup - store locally
-        const users = JSON.parse(safeStorage.getItem('icfCollectUsers') || '[]');
-        if (!users.find(u => u.email === email)) {
-            users.push({ 
-                id: Date.now().toString(), 
-                name, 
-                email, 
-                password 
-            });
-            safeStorage.setItem('icfCollectUsers', JSON.stringify(users));
-            
-            document.getElementById('authSuccess').style.display = 'block';
-            document.getElementById('authSuccess').textContent = 'Account created offline! Please login.';
-            setTimeout(() => switchAuthTab('login'), 1500);
-        } else {
-            document.getElementById('authError').style.display = 'block';
-            document.getElementById('authError').textContent = 'Email already exists';
-        }
-    }
+    // Simulate signup
+    setTimeout(() => {
+        showMessage('Account created! Please login.', 'success');
+        showLoading(false);
+        switchTab('login');
+    }, 1000);
 }
 
 async function handleForgotPassword(e) {
     e.preventDefault();
     
-    const email = document.getElementById('forgotEmail').value.trim();
+    const email = document.getElementById('forgotEmail').value;
     
-    document.getElementById('authError').style.display = 'none';
-    document.getElementById('authSuccess').style.display = 'none';
-    showAuthLoading(true);
+    showLoading(true);
     
-    try {
-        const response = await fetch(CONFIG.AUTH_SCRIPT_URL + '?action=forgotPassword&email=' + encodeURIComponent(email), {
-            mode: 'cors'
-        });
-        
-        const result = await response.json();
-        showAuthLoading(false);
-        
-        if (result.success) {
-            document.getElementById('authSuccess').style.display = 'block';
-            document.getElementById('authSuccess').textContent = 'Password sent to your email!';
-            setTimeout(() => switchAuthTab('login'), 2000);
-        } else {
-            document.getElementById('authError').style.display = 'block';
-            document.getElementById('authError').textContent = result.message || 'Email not found';
-        }
-    } catch (error) {
-        showAuthLoading(false);
-        document.getElementById('authError').style.display = 'block';
-        document.getElementById('authError').textContent = 'Connection error. Please try again.';
-    }
-}
-
-function showBuilder() {
-    document.getElementById('authContainer').style.display = 'none';
-    document.querySelector('.header').style.display = 'flex';
-    document.getElementById('mainContainer').style.display = 'block';
-    document.getElementById('headerUser').innerHTML = ' ' + (currentUser?.name || 'User');
+    // Simulate password reset
+    setTimeout(() => {
+        showMessage('Reset link sent to your email!', 'success');
+        showLoading(false);
+    }, 1000);
 }
 
 function logout() {
     currentUser = null;
-    safeStorage.removeItem('icfCollectUser');
-    document.getElementById('mainContainer').style.display = 'none';
-    document.querySelector('.header').style.display = 'none';
-    document.getElementById('authContainer').style.display = 'flex';
-    switchAuthTab('login');
-    notify('Logged out', 'info');
+    Storage.remove('user');
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('loginPage').style.display = 'flex';
+    switchTab('login');
+}
+
+// ==================== FORM BUILDER FUNCTIONS ====================
+function addField(type) {
+    fieldCounter++;
+    
+    const field = {
+        id: 'field_' + fieldCounter,
+        type: type,
+        label: getDefaultLabel(type),
+        name: type + '_' + fieldCounter,
+        required: false,
+        placeholder: '',
+        options: type === 'select' || type === 'radio' ? ['Option 1', 'Option 2'] : []
+    };
+    
+    formFields.push(field);
+    renderFields();
+    selectField(field.id);
+    saveForm();
+}
+
+function getDefaultLabel(type) {
+    const labels = {
+        'text': 'Text Input',
+        'number': 'Number Input',
+        'email': 'Email Address',
+        'phone': 'Phone Number',
+        'date': 'Date',
+        'textarea': 'Long Text',
+        'select': 'Dropdown',
+        'radio': 'Radio Buttons',
+        'checkbox': 'Checkboxes',
+        'yesno': 'Yes/No Question',
+        'gps': 'GPS Location',
+        'signature': 'Signature',
+        'period': 'Reporting Period'
+    };
+    return labels[type] || type + ' Field';
+}
+
+function renderFields() {
+    const container = document.getElementById('formFields');
+    const emptyCanvas = document.getElementById('emptyCanvas');
+    
+    if (formFields.length === 0) {
+        emptyCanvas.style.display = 'block';
+        container.innerHTML = '';
+        return;
+    }
+    
+    emptyCanvas.style.display = 'none';
+    
+    container.innerHTML = formFields.map(field => `
+        <div class="field-wrapper ${selectedFieldId === field.id ? 'selected' : ''}" 
+             onclick="selectField('${field.id}')">
+            <div class="field-header">
+                <span class="field-label">${field.label}</span>
+                <div class="field-actions">
+                    <button class="field-edit" onclick="editField('${field.id}')">✏️</button>
+                    <button class="field-delete" onclick="deleteField('${field.id}')">🗑️</button>
+                </div>
+            </div>
+            <div class="field-preview">
+                ${getFieldPreview(field)}
+            </div>
+        </div>
+    `).join('');
+}
+
+function getFieldPreview(field) {
+    switch(field.type) {
+        case 'text':
+        case 'email':
+        case 'phone':
+            return `<input type="${field.type}" placeholder="${field.placeholder || field.label}" disabled>`;
+        case 'number':
+            return `<input type="number" placeholder="${field.placeholder || field.label}" disabled>`;
+        case 'date':
+            return `<input type="date" disabled>`;
+        case 'textarea':
+            return `<textarea rows="3" placeholder="${field.placeholder || field.label}" disabled></textarea>`;
+        case 'select':
+            return `<select disabled><option>${field.options.join('</option><option>')}</option></select>`;
+        case 'radio':
+            return field.options.map(opt => `<label><input type="radio" disabled> ${opt}</label>`).join('<br>');
+        case 'checkbox':
+            return field.options.map(opt => `<label><input type="checkbox" disabled> ${opt}</label>`).join('<br>');
+        case 'yesno':
+            return `<label><input type="radio" disabled> Yes</label><br><label><input type="radio" disabled> No</label>`;
+        case 'gps':
+            return `<button disabled>📍 Get Location</button>`;
+        case 'signature':
+            return `<div style="border:1px solid #ccc; height:100px; background:#f9f9f9"></div>`;
+        default:
+            return `<input type="text" placeholder="${field.label}" disabled>`;
+    }
+}
+
+function selectField(id) {
+    selectedFieldId = id;
+    renderFields();
+    renderProperties();
+}
+
+function editField(id) {
+    selectField(id);
+}
+
+function deleteField(id) {
+    if (confirm('Delete this field?')) {
+        formFields = formFields.filter(f => f.id !== id);
+        if (selectedFieldId === id) {
+            selectedFieldId = null;
+            renderProperties();
+        }
+        renderFields();
+        saveForm();
+    }
+}
+
+function renderProperties() {
+    const container = document.getElementById('propertiesContent');
+    
+    if (!selectedFieldId) {
+        container.innerHTML = '<p class="no-selection">Select a field to edit its properties</p>';
+        return;
+    }
+    
+    const field = formFields.find(f => f.id === selectedFieldId);
+    if (!field) return;
+    
+    let html = `
+        <div class="prop-group">
+            <label>Label</label>
+            <input type="text" id="propLabel" value="${field.label}" onchange="updateField('label', this.value)">
+        </div>
+        <div class="prop-group">
+            <label>Required</label>
+            <input type="checkbox" id="propRequired" ${field.required ? 'checked' : ''} onchange="updateField('required', this.checked)">
+        </div>
+    `;
+    
+    if (field.type !== 'yesno' && field.type !== 'gps' && field.type !== 'signature') {
+        html += `
+            <div class="prop-group">
+                <label>Placeholder</label>
+                <input type="text" id="propPlaceholder" value="${field.placeholder || ''}" onchange="updateField('placeholder', this.value)">
+            </div>
+        `;
+    }
+    
+    if (field.type === 'select' || field.type === 'radio' || field.type === 'checkbox') {
+        html += `
+            <div class="prop-group">
+                <label>Options (one per line)</label>
+                <textarea id="propOptions" rows="4" onchange="updateField('options', this.value.split('\\n').filter(o => o.trim()))">${field.options.join('\n')}</textarea>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function updateField(prop, value) {
+    const field = formFields.find(f => f.id === selectedFieldId);
+    if (field) {
+        field[prop] = value;
+        renderFields();
+        saveForm();
+    }
+}
+
+// ==================== FORM OPERATIONS ====================
+function saveForm() {
+    Storage.set('icf_form', JSON.stringify({
+        title: document.getElementById('formTitle').value,
+        fields: formFields
+    }));
+}
+
+function loadForm() {
+    const saved = Storage.get('icf_form');
+    if (saved) {
+        try {
+            const data = JSON.parse(saved);
+            document.getElementById('formTitle').value = data.title || 'Untitled Form';
+            formFields = data.fields || [];
+            fieldCounter = formFields.length;
+            renderFields();
+        } catch (e) {}
+    }
+}
+
+function previewForm() {
+    const previewBody = document.getElementById('previewBody');
+    const title = document.getElementById('formTitle').value;
+    
+    previewBody.innerHTML = `
+        <h3 style="margin-bottom:20px;">${title}</h3>
+        ${formFields.map(field => `
+            <div style="margin-bottom:15px;">
+                <label style="display:block; margin-bottom:5px; font-weight:500;">
+                    ${field.label} ${field.required ? '<span style="color:red;">*</span>' : ''}
+                </label>
+                ${getFieldPreview(field)}
+            </div>
+        `).join('')}
+        <button class="btn-primary" style="margin-top:20px;">Submit</button>
+    `;
+    
+    document.getElementById('previewModal').classList.add('show');
+}
+
+function closePreview() {
+    document.getElementById('previewModal').classList.remove('show');
+}
+
+function shareForm() {
+    // Create a simple shareable link (in real app, this would save to server)
+    const formData = btoa(JSON.stringify({
+        title: document.getElementById('formTitle').value,
+        fields: formFields
+    }));
+    
+    const shareUrl = window.location.origin + window.location.pathname + '?form=' + formData.substring(0, 50);
+    document.getElementById('shareUrl').textContent = shareUrl;
+    document.getElementById('shareModal').classList.add('show');
+}
+
+function copyShareUrl() {
+    const url = document.getElementById('shareUrl').textContent;
+    navigator.clipboard.writeText(url);
+    alert('Link copied to clipboard!');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('show');
 }
 
 // ==================== INITIALIZATION ====================
 function init() {
-    // Set up event listeners
-    document.querySelectorAll('.auth-tab').forEach(tab => {
-        tab.addEventListener('click', () => switchAuthTab(tab.dataset.tab));
-    });
-    
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
-    document.getElementById('signupForm').addEventListener('submit', handleSignup);
-    document.getElementById('forgotForm').addEventListener('submit', handleForgotPassword);
-    
-    // Check if user is already logged in
-    checkAuth();
+    // Check for saved user
+    const savedUser = Storage.get('user');
+    if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('userDisplay').textContent = currentUser.name;
+        loadForm();
+    }
 }
-
-// ==================== MAKE FUNCTIONS GLOBAL ====================
-window.switchAuthTab = switchAuthTab;
-window.showForgotPassword = showForgotPassword;
-window.logout = logout;
 
 // Start the app
 init();
