@@ -358,6 +358,52 @@
         .sync-mode-option.selected.tracker { border-color: #6f42c1; background: #f3e8ff; }
         .sync-mode-option h4 { font-size: 13px; margin-bottom: 5px; }
         .sync-mode-option p { font-size: 10px; color: #666; }
+
+        /* Cascading User Field Styles */
+        .viewer-field .viewer-field-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            color: #333;
+        }
+        
+        .viewer-field select,
+        .viewer-field input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #004080;
+            border-radius: 6px;
+            font-family: 'Oswald', sans-serif;
+            font-size: 13px;
+            background: white;
+        }
+        
+        .viewer-field select:focus,
+        .viewer-field input[type="password"]:focus {
+            outline: none;
+            border-color: #004080;
+            box-shadow: 0 0 0 3px rgba(0,64,128,0.2);
+        }
+        
+        .viewer-field button {
+            transition: all 0.2s;
+            font-family: 'Oswald', sans-serif;
+            font-weight: 700;
+        }
+        
+        .viewer-field button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .viewer-field .login-success {
+            background: #e8f4fc;
+            border: 2px solid #004080;
+            border-radius: 8px;
+            padding: 15px;
+        }
         
         @media (max-width: 768px) {
             .main-container { flex-direction: column; }
@@ -7602,7 +7648,7 @@
             if (typeof initIcons === 'function') initIcons();
         };
         
-        // Form renderer
+        // Form renderer - FIXED VERSION
         window.renderCascadingUserField = function(field) {
             if (cascadingUserData.currentUser) {
                 const user = cascadingUserData.currentUser;
@@ -7668,10 +7714,7 @@
                 </div>
             `;
         };
-        
-        console.log('✅ Cascading User Login Field Ready!');
-        
-        // ==================== CROSS-FIELD VALIDATION ENGINE ====================
+                // ==================== CROSS-FIELD VALIDATION ENGINE ====================
         // One function to handle all cross-field validation (age > height, etc.)
         
         function initCrossFieldValidation() {
